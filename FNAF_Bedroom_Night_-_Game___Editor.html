@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>FNAF: Mi Habitación - Noche de Terror</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background-color: #020408;
+            color: #ecefe6;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            touch-action: none;
+            user-select: none;
+        }
+
+        /* 16:9 Landscape Frame Container */
+        .game-viewport-frame {
+            width: 100vw;
+            height: calc(100vw * (9 / 16));
+            max-height: 100vh;
+            max-width: calc(100vh * (16 / 9));
+            margin: auto;
+            position: relative;
+            background-color: #000000;
+            overflow: hidden;
+            box-shadow: 0 0 50px rgba(0,0,0,0.95), 0 0 15px rgba(0,0,0,0.8);
+            border: 1px solid #111827;
+        }
+
+        /* Panoramic Head Turning Animation */
+        #panoramaRoom {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            transform-origin: center center;
+            will-change: transform;
+            transition: transform 0.22s cubic-bezier(0.15, 0.85, 0.35, 1.2);
+        }
+
+        /* Atmospheric Vignette Overlay */
+        .horror-vignette {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            box-shadow: inset 0 0 120px rgba(0, 0, 0, 0.98), inset 0 0 40px rgba(0, 0, 0, 0.85);
+            z-index: 25;
+        }
+
+        /* Noise & Film Grain Overlay */
+        .film-grain {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            opacity: 0.07;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+            z-index: 26;
+        }
+
+        /* Custom UI Buttons for iOS Safari */
+        .glass-btn {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: #e2e8f0;
+            transition: all 0.2s ease;
+        }
+
+        .glass-btn:active {
+            transform: scale(0.95);
+            background: rgba(30, 41, 59, 0.9);
+        }
+
+        /* Paranoia Red Warning Flash */
+        @keyframes subtlePulse {
+            0%, 100% { opacity: 0; }
+            50% { opacity: 0.25; }
+        }
+
+        .paranoia-overlay {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background: radial-gradient(circle, transparent 40%, rgba(153, 27, 27, 0.4) 100%);
+            z-index: 24;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+
+        .paranoia-active {
+            animation: subtlePulse 2s infinite ease-in-out;
+        }
+    </style>
+</head>
+<body class="flex flex-col justify-between items-center bg-black">
+
+    <!-- TOP HEADER / CONTROL BAR -->
+    <header class="w-full h-12 bg-slate-950/90 border-b border-slate-900 px-4 flex items-center justify-between z-50 select-none">
+        <div class="flex items-center gap-2">
+            <div id="paranoiaIndicator" class="w-2.5 h-2.5 rounded-full bg-emerald-500 transition-colors duration-500"></div>
+            <h1 class="text-xs sm:text-sm font-semibold tracking-wider text-slate-300 uppercase">Habitación (Noche 1)</h1>
+        </div>
+
+        <div class="flex items-center gap-2">
+            <!-- PHOTO LOAD BUTTON -->
+            <label class="glass-btn text-xs px-3 py-1.5 rounded-md flex items-center gap-2 cursor-pointer">
+                <i class="fa-solid fa-camera text-slate-400"></i>
+                <span class="hidden sm:inline">Foto Real</span>
+                <input type="file" id="directPhotoUpload" accept="image/*" class="hidden">
+            </label>
+            
+            <!-- SAVED PHOTO PERMANENT BADGE -->
+            <span id="savedPhotoBadge" class="hidden text-[10px] font-mono bg-emerald-950 text-emerald-400 border border-emerald-700/50 px-2.5 py-1 rounded-md flex items-center gap-1">
+                <i class="fa-solid fa-check text-xs"></i>
+                <span>ESCENARIO FIJO</span>
+            </span>
+
+            <!-- AUDIO AMBIENT TOGGLE -->
+            <button id="toggleAudioBtn" class="glass-btn text-xs px-3 py-1.5 rounded-md flex items-center gap-2">
+                <i id="audioIcon" class="fa-solid fa-volume-xmark text-red-400"></i>
+                <span class="hidden sm:inline">Ambiente</span>
+            </button>
+
+            <!-- EDITOR PANEL TOGGLE -->
+            <button id="openEditorBtn" class="glass-btn text-xs px-3 py-1.5 rounded-md flex items-center gap-2">
+                <i class="fa-solid fa-sliders text-slate-400"></i>
+                <span>Edición</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- MAIN GAME VIEWPORT (16:9 RATIO LOCK) -->
+    <main class="flex-1 w-full flex items-center justify-center relative overflow-hidden bg-black p-0 sm:p-2">
+        <div id="gameContainer" class="game-viewport-frame rounded-none sm:rounded-lg cursor-crosshair">
+            
+            <!-- PANORAMA CONTAINER (ZOOM & HEAD PANNING) -->
+            <div id="panoramaRoom">
+                <!-- MAIN ROOM CANVAS -->
+                <canvas id="roomCanvas" class="w-full h-full object-cover block"></canvas>
+            </div>
+
+            <!-- FLASHLIGHT DARKNESS MASK CANVAS -->
+            <canvas id="flashlightCanvas" class="absolute inset-0 w-full h-full z-10 pointer-events-none"></canvas>
+
+            <!-- PARANOIA DANGER OVERLAY -->
+            <div id="paranoiaOverlay" class="paranoia-overlay"></div>
+
+            <!-- ATMOSPHERIC OVERLAYS -->
+            <div class="horror-vignette"></div>
+            <div class="film-grain"></div>
+
+            <!-- HEAD LOOK TOUCH ZONES (LEFT, CENTER, RIGHT) -->
+            <div id="touchLeft" class="absolute left-0 top-0 bottom-0 w-1/3 z-30 flex items-center justify-start pl-4 group cursor-pointer">
+                <div class="bg-slate-950/70 border border-slate-800 text-slate-400 p-3 rounded-full opacity-30 group-hover:opacity-90 transition-all transform group-hover:-translate-x-1 shadow-2xl">
+                    <i class="fa-solid fa-chevron-left text-lg"></i>
+                </div>
+            </div>
+
+            <div id="touchCenter" class="absolute left-1/3 right-1/3 top-0 bottom-0 z-30 flex items-center justify-center group cursor-pointer">
+                <div id="laptopPrompt" class="bg-slate-950/80 border border-slate-700/60 text-slate-300 px-3 py-1.5 rounded-full text-[11px] font-mono uppercase shadow-2xl opacity-40 group-hover:opacity-100 group-hover:scale-105 transition-all flex items-center gap-2">
+                    <i class="fa-solid fa-laptop text-cyan-500 animate-pulse"></i>
+                    <span>MONITOR CÁMARAS</span>
+                </div>
+            </div>
+
+            <div id="touchRight" class="absolute right-0 top-0 bottom-0 w-1/3 z-30 flex items-center justify-end pr-4 group cursor-pointer">
+                <div class="bg-slate-950/70 border border-slate-800 text-slate-400 p-3 rounded-full opacity-30 group-hover:opacity-90 transition-all transform group-hover:translate-x-1 shadow-2xl">
+                    <i class="fa-solid fa-chevron-right text-lg"></i>
+                </div>
+            </div>
+
+            <!-- HUD STATUS INFOBAR -->
+            <div id="headViewBadge" class="absolute bottom-3 left-3 z-30 bg-slate-950/80 border border-slate-800/80 px-3 py-1 rounded-md text-[11px] font-mono text-slate-400 tracking-wider">
+                VISTA: FRENTE (TV & LAPTOP)
+            </div>
+
+            <div id="threatWarningBadge" class="absolute top-3 right-3 z-30 bg-red-950/90 border border-red-700/60 px-3 py-1 rounded-md text-[10px] font-mono text-red-300 tracking-widest hidden animate-pulse">
+                SENSACIÓN EXTRAÑA CERCA...
+            </div>
+        </div>
+    </main>
+
+    <!-- CAMERA MONITOR MODAL -->
+    <div id="cameraMonitor" class="fixed inset-0 z-50 bg-slate-950/95 flex flex-col justify-between p-4 transition-all duration-300 transform translate-y-full opacity-0 pointer-events-none">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+            <div class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-red-600 animate-ping"></span>
+                <span class="font-mono text-xs sm:text-sm text-slate-300 tracking-widest uppercase" id="activeCamName">CAM 01 - PASILLO DE ENTRADA</span>
+            </div>
+            <button id="closeCamBtn" class="bg-slate-900 border border-slate-700 text-slate-300 px-3 py-1 rounded text-xs font-mono">
+                CERRAR MONITOR [X]
+            </button>
+        </div>
+
+        <div class="flex-1 my-3 bg-black border border-slate-800 rounded relative overflow-hidden flex items-center justify-center">
+            <canvas id="camNoiseCanvas" class="absolute inset-0 w-full h-full opacity-40 pointer-events-none"></canvas>
+            <div class="font-mono text-sm sm:text-xl text-slate-600 tracking-widest uppercase animate-pulse">SEÑAL EN VIVO</div>
+        </div>
+
+        <div class="grid grid-cols-4 gap-2 max-w-md mx-auto w-full">
+            <button class="cam-select-btn glass-btn py-2 rounded text-xs font-mono active:bg-slate-800" data-cam="CAM 01 - PASILLO DE ENTRADA">CAM 01</button>
+            <button class="cam-select-btn glass-btn py-2 rounded text-xs font-mono active:bg-slate-800" data-cam="CAM 02 - VENTANA EXTERIOR">CAM 02</button>
+            <button class="cam-select-btn glass-btn py-2 rounded text-xs font-mono active:bg-slate-800" data-cam="CAM 03 - MARGEN DE LA PUERTA">CAM 03</button>
+            <button class="cam-select-btn glass-btn py-2 rounded text-xs font-mono active:bg-slate-800" data-cam="CAM 04 - INTERIOR ARMARIO">CAM 04</button>
+        </div>
+    </div>
+
+    <!-- CANVA / EDITOR SETTINGS DRAWER -->
+    <div id="canvaEditorDrawer" class="fixed inset-y-0 right-0 w-80 sm:w-96 bg-slate-950/95 border-l border-slate-800 z-50 p-5 transform translate-x-full transition-transform duration-300 overflow-y-auto shadow-2xl flex flex-col justify-between">
+        <div>
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+                <div class="flex items-center gap-2 text-slate-200 text-sm font-semibold tracking-wider uppercase">
+                    <i class="fa-solid fa-sliders text-cyan-500"></i>
+                    <span>Editor de Juego</span>
+                </div>
+                <button id="closeEditorBtn" class="text-slate-400 hover:text-white text-base">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="space-y-4 text-xs">
+                <!-- CUSTOM IMAGE UPLOAD SECTION -->
+                <div class="bg-slate-900/80 p-3 rounded-lg border border-slate-800 space-y-2">
+                    <label class="block font-medium text-slate-300">1. Foto de tu Habitación</label>
+                    <label class="glass-btn p-2.5 rounded-lg flex items-center justify-center gap-2 cursor-pointer w-full text-center">
+                        <i class="fa-solid fa-upload text-slate-400"></i>
+                        <span>Cargar Foto Real (`image.png`)</span>
+                        <input type="file" id="canvaPhotoUpload" accept="image/*" class="hidden">
+                    </label>
+                    <button id="clearSavedPhotoBtn" class="w-full text-[11px] text-red-400 hover:text-red-300 py-1 hidden font-mono">
+                        <i class="fa-solid fa-trash mr-1"></i> Borrar Foto Fijada en Memoria
+                    </button>
+                </div>
+
+                <!-- FLASHLIGHT BEAM SIZE -->
+                <div class="bg-slate-900/80 p-3 rounded-lg border border-slate-800 space-y-2">
+                    <div class="flex justify-between text-slate-300">
+                        <span>2. Haz de Luz de la Linterna</span>
+                        <span id="beamVal" class="font-mono text-cyan-400">140px</span>
+                    </div>
+                    <input type="range" id="beamRange" min="70" max="260" value="140" class="w-full accent-cyan-500">
+                </div>
+
+                <!-- AMBIENT DARKNESS -->
+                <div class="bg-slate-900/80 p-3 rounded-lg border border-slate-800 space-y-2">
+                    <div class="flex justify-between text-slate-300">
+                        <span>3. Nivel de Oscuridad</span>
+                        <span id="darkVal" class="font-mono text-cyan-400">88%</span>
+                    </div>
+                    <input type="range" id="darkRange" min="40" max="98" value="88" class="w-full accent-cyan-500">
+                </div>
+
+                <!-- PARANOIA FREQUENCY -->
+                <div class="bg-slate-900/80 p-3 rounded-lg border border-slate-800 space-y-2">
+                    <div class="flex justify-between text-slate-300">
+                        <span>4. Frecuencia de Sombras/Apariciones</span>
+                        <span id="paranoiaVal" class="font-mono text-cyan-400">Media</span>
+                    </div>
+                    <input type="range" id="paranoiaRange" min="1" max="5" value="3" class="w-full accent-cyan-500">
+                </div>
+
+                <!-- ZOOM LEVEL -->
+                <div class="bg-slate-900/80 p-3 rounded-lg border border-slate-800 space-y-2">
+                    <div class="flex justify-between text-slate-300">
+                        <span>5. Enfoque / Zoom Inicial</span>
+                        <span id="zoomVal" class="font-mono text-cyan-400">1.15x</span>
+                    </div>
+                    <input type="range" id="zoomRange" min="1.0" max="1.4" step="0.05" value="1.15" class="w-full accent-cyan-500">
+                </div>
+            </div>
+        </div>
+
+        <div class="pt-4 border-t border-slate-800">
+            <button id="resetDefaultsBtn" class="w-full glass-btn py-2 rounded-lg font-mono transition-all text-xs">
+                Restablecer Valores
+            </button>
+        </div>
+    </div>
+
+    <script>
+        /* GAME STATE OBJECT */
+        const state = {
+            headView: 'center', // 'left', 'center', 'right'
+            headAngle: 0,
+            targetAngle: 0,
+            panX: 0,
+            targetPanX: 0,
+            zoom: 1.15,
+            flashlightPos: { x: 300, y: 200 },
+            flashlightRadius: 140,
+            ambientDarkness: 0.88,
+            userImage: null,
+            activeCam: 'CAM 01 - PASILLO DE ENTRADA',
+            
+            // TERROR & PARANOIA MECHANICS
+            threatZone: 'none', // 'left', 'right', 'none'
+            threatIntensity: 0, // 0 to 1
+            threatTimer: 0,
+            paranoiaFrequency: 3,
+            audioEnabled: false,
+            breathPhase: 0
+        };
+
+        /* DOM ELEMENTS */
+        const gameContainer = document.getElementById('gameContainer');
+        const panoramaRoom = document.getElementById('panoramaRoom');
+        const roomCanvas = document.getElementById('roomCanvas');
+        const roomCtx = roomCanvas.getContext('2d');
+        const flashlightCanvas = document.getElementById('flashlightCanvas');
+        const flashlightCtx = flashlightCanvas.getContext('2d');
+        const headViewBadge = document.getElementById('headViewBadge');
+        const paranoiaIndicator = document.getElementById('paranoiaIndicator');
+        const paranoiaOverlay = document.getElementById('paranoiaOverlay');
+        const threatWarningBadge = document.getElementById('threatWarningBadge');
+
+        const touchLeft = document.getElementById('touchLeft');
+        const touchCenter = document.getElementById('touchCenter');
+        const touchRight = document.getElementById('touchRight');
+
+        const cameraMonitor = document.getElementById('cameraMonitor');
+        const closeCamBtn = document.getElementById('closeCamBtn');
+        const activeCamName = document.getElementById('activeCamName');
+        const camNoiseCanvas = document.getElementById('camNoiseCanvas');
+        const camNoiseCtx = camNoiseCanvas.getContext('2d');
+
+        const openEditorBtn = document.getElementById('openEditorBtn');
+        const closeEditorBtn = document.getElementById('closeEditorBtn');
+        const canvaEditorDrawer = document.getElementById('canvaEditorDrawer');
+        const toggleAudioBtn = document.getElementById('toggleAudioBtn');
+        const audioIcon = document.getElementById('audioIcon');
+
+        const directPhotoUpload = document.getElementById('directPhotoUpload');
+        const canvaPhotoUpload = document.getElementById('canvaPhotoUpload');
+        const savedPhotoBadge = document.getElementById('savedPhotoBadge');
+        const clearSavedPhotoBtn = document.getElementById('clearSavedPhotoBtn');
+        const beamRange = document.getElementById('beamRange');
+        const beamVal = document.getElementById('beamVal');
+        const darkRange = document.getElementById('darkRange');
+        const darkVal = document.getElementById('darkVal');
+        const paranoiaRange = document.getElementById('paranoiaRange');
+        const paranoiaVal = document.getElementById('paranoiaVal');
+        const zoomRange = document.getElementById('zoomRange');
+        const zoomVal = document.getElementById('zoomVal');
+
+        /* PROCEDURAL HORROR AUDIO ENGINE */
+        let audioCtx = null;
+        let ambientDroneOsc = null;
+        let ambientGain = null;
+        let heartbeatInterval = null;
+
+        function initAudioEngine() {
+            if (audioCtx) return;
+            try {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                
+                // Deep Solitude Drone Synthesizer
+                ambientDroneOsc = audioCtx.createOscillator();
+                ambientGain = audioCtx.createGain();
+                
+                ambientDroneOsc.type = 'sawtooth';
+                ambientDroneOsc.frequency.setValueAtTime(45, audioCtx.currentTime); // Low deep drone
+                
+                // Low-pass filter for dark creepy muffled hum
+                const filter = audioCtx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(120, audioCtx.currentTime);
+
+                ambientGain.gain.setValueAtTime(0.04, audioCtx.currentTime);
+
+                ambientDroneOsc.connect(filter);
+                filter.connect(ambientGain);
+                ambientGain.connect(audioCtx.destination);
+                
+                ambientDroneOsc.start();
+                state.audioEnabled = true;
+                audioIcon.className = "fa-solid fa-volume-high text-emerald-400";
+            } catch (e) {
+                console.log("Audio not supported or blocked");
+            }
+        }
+
+        function playFlashlightClickSound() {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(150, audioCtx.currentTime + 0.04);
+            gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.04);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.04);
+        }
+
+        function playHeartbeatSound() {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(60, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(20, audioCtx.currentTime + 0.12);
+            gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.12);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.12);
+        }
+
+        function playThreatDispelSound() {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.6);
+            gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.6);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.6);
+        }
+
+        toggleAudioBtn.addEventListener('click', () => {
+            if (!audioCtx) {
+                initAudioEngine();
+            } else if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+                state.audioEnabled = true;
+                audioIcon.className = "fa-solid fa-volume-high text-emerald-400";
+            } else {
+                audioCtx.suspend();
+                state.audioEnabled = false;
+                audioIcon.className = "fa-solid fa-volume-xmark text-red-400";
+            }
+        });
+
+        /* PROCEDURAL ATMOSPHERIC ROOM RENDERING */
+        function drawDarkBedroomProcedural(w, h) {
+            // Cold, dark nocturnal wall
+            const wallGrad = roomCtx.createLinearGradient(0, 0, 0, h);
+            wallGrad.addColorStop(0, '#040810');
+            wallGrad.addColorStop(1, '#020306');
+            roomCtx.fillStyle = wallGrad;
+            roomCtx.fillRect(0, 0, w, h);
+
+            // Dark Wooden Floor
+            const floorGrad = roomCtx.createLinearGradient(0, h * 0.72, 0, h);
+            floorGrad.addColorStop(0, '#0d0b0a');
+            floorGrad.addColorStop(1, '#030202');
+            roomCtx.fillStyle = floorGrad;
+            roomCtx.fillRect(0, h * 0.72, w, h * 0.28);
+
+            // 1. LEFT WINDOW & DARK CURTAINS
+            roomCtx.fillStyle = '#060c14';
+            roomCtx.fillRect(0, 0, w * 0.28, h * 0.85);
+            for (let i = 0; i < 7; i++) {
+                roomCtx.fillStyle = i % 2 === 0 ? '#0a1420' : '#04090e';
+                roomCtx.fillRect(i * (w * 0.04), 0, w * 0.04, h * 0.85);
+            }
+
+            // 2. AIR CONDITIONER (TOP LEFT)
+            roomCtx.fillStyle = '#111822';
+            roomCtx.fillRect(w * 0.33, h * 0.08, w * 0.15, h * 0.11);
+            roomCtx.fillStyle = '#0284c7';
+            roomCtx.fillRect(w * 0.45, h * 0.16, 3, 3); // Blue LED light
+
+            // 3. WALL MOUNTED TV (CENTER)
+            roomCtx.fillStyle = '#010204';
+            roomCtx.fillRect(w * 0.48, h * 0.18, w * 0.22, h * 0.28);
+            roomCtx.strokeStyle = '#0f172a';
+            roomCtx.lineWidth = 3;
+            roomCtx.strokeRect(w * 0.48, h * 0.18, w * 0.22, h * 0.28);
+
+            // 4. DRESSER & GLOWING LAPTOP (CENTER)
+            roomCtx.fillStyle = '#080d1a';
+            roomCtx.fillRect(w * 0.47, h * 0.52, w * 0.24, h * 0.22);
+            
+            // Glowing Laptop Display
+            roomCtx.fillStyle = '#0f172a';
+            roomCtx.fillRect(w * 0.53, h * 0.43, w * 0.12, h * 0.09);
+            roomCtx.fillStyle = '#0369a1';
+            roomCtx.globalAlpha = 0.85;
+            roomCtx.fillRect(w * 0.535, h * 0.435, w * 0.11, h * 0.08);
+            roomCtx.globalAlpha = 1.0;
+
+            // 5. BED WITH BLUE/WHITE CHECKERED PLAID SHEET (BOTTOM RIGHT)
+            const bedX = w * 0.42;
+            const bedY = h * 0.68;
+            const bedW = w * 0.58;
+            const bedH = h * 0.32;
+
+            roomCtx.fillStyle = '#0f172a';
+            roomCtx.fillRect(bedX, bedY, bedW, bedH);
+
+            const rows = 8;
+            const cols = 12;
+            const cellW = bedW / cols;
+            const cellH = bedH / rows;
+
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    roomCtx.fillStyle = (r + c) % 2 === 0 ? '#1e293b' : '#0284c7';
+                    roomCtx.globalAlpha = 0.18;
+                    roomCtx.fillRect(bedX + c * cellW, bedY + r * cellH, cellW, cellH);
+                }
+            }
+            roomCtx.globalAlpha = 1.0;
+
+            // 6. RIGHT DOOR & WARDROBE
+            roomCtx.fillStyle = '#060a12';
+            roomCtx.fillRect(w * 0.76, h * 0.22, w * 0.12, h * 0.52);
+            roomCtx.fillStyle = '#080c14';
+            roomCtx.fillRect(w * 0.89, h * 0.10, w * 0.11, h * 0.65);
+        }
+
+        function drawRoom() {
+            const rect = gameContainer.getBoundingClientRect();
+            const w = roomCanvas.width = rect.width;
+            const h = roomCanvas.height = rect.height;
+
+            if (state.userImage) {
+                const imgAspect = state.userImage.width / state.userImage.height;
+                const canvasAspect = w / h;
+                let renderW, renderH, offsetX, offsetY;
+
+                if (canvasAspect > imgAspect) {
+                    renderW = w;
+                    renderH = w / imgAspect;
+                    offsetX = 0;
+                    offsetY = (h - renderH) / 2;
+                } else {
+                    renderH = h;
+                    renderW = h * imgAspect;
+                    offsetX = (w - renderW) / 2;
+                    offsetY = 0;
+                }
+
+                roomCtx.fillStyle = '#000000';
+                roomCtx.fillRect(0, 0, w, h);
+                roomCtx.drawImage(state.userImage, offsetX, offsetY, renderW, renderH);
+            } else {
+                drawDarkBedroomProcedural(w, h);
+            }
+
+            // EERIE PARANOIA THREAT VISUALS (GLOWING EYES / CREEPING SHADOW)
+            if (state.threatZone !== 'none' && state.threatIntensity > 0.1) {
+                roomCtx.save();
+                let threatX = state.threatZone === 'left' ? w * 0.12 : w * 0.82;
+                let threatY = h * 0.45;
+
+                // Creeping Silhouette
+                roomCtx.fillStyle = '#000000';
+                roomCtx.globalAlpha = Math.min(state.threatIntensity * 0.85, 0.9);
+                roomCtx.beginPath();
+                roomCtx.ellipse(threatX, threatY, 22, 55, 0, 0, Math.PI * 2);
+                roomCtx.fill();
+
+                // Faint Frightening Glowing Eyes
+                if (state.threatIntensity > 0.3) {
+                    roomCtx.fillStyle = '#f87171';
+                    roomCtx.globalAlpha = Math.min(state.threatIntensity, 0.95);
+                    
+                    roomCtx.beginPath();
+                    roomCtx.arc(threatX - 6, threatY - 20, 2.5, 0, Math.PI * 2);
+                    roomCtx.arc(threatX + 6, threatY - 20, 2.5, 0, Math.PI * 2);
+                    roomCtx.fill();
+                }
+
+                roomCtx.restore();
+            }
+        }
+
+        function renderFlashlight() {
+            const rect = gameContainer.getBoundingClientRect();
+            const w = flashlightCanvas.width = rect.width;
+            const h = flashlightCanvas.height = rect.height;
+
+            flashlightCtx.clearRect(0, 0, w, h);
+
+            // Cold pitch darkness mask
+            flashlightCtx.fillStyle = `rgba(1, 3, 8, ${state.ambientDarkness})`;
+            flashlightCtx.fillRect(0, 0, w, h);
+
+            // Cut out flashlight beam
+            flashlightCtx.globalCompositeOperation = 'destination-out';
+            
+            const x = state.flashlightPos.x;
+            const y = state.flashlightPos.y;
+            const r = state.flashlightRadius;
+
+            // Flashlight slight buzz flicker
+            const flickerR = r + (Math.random() * 4 - 2);
+
+            const beam = flashlightCtx.createRadialGradient(x, y, 5, x, y, flickerR);
+            beam.addColorStop(0, 'rgba(0, 0, 0, 1)');
+            beam.addColorStop(0.7, 'rgba(0, 0, 0, 0.85)');
+            beam.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
+            flashlightCtx.fillStyle = beam;
+            flashlightCtx.beginPath();
+            flashlightCtx.arc(x, y, flickerR, 0, Math.PI * 2);
+            flashlightCtx.fill();
+
+            flashlightCtx.globalCompositeOperation = 'source-over';
+        }
+
+        function updateHeadView(view) {
+            state.headView = view;
+            playFlashlightClickSound();
+
+            if (view === 'left') {
+                state.targetAngle = -7;
+                state.targetPanX = 55;
+                headViewBadge.textContent = 'VISTA: IZQUIERDA (VENTANA & CORTINAS)';
+            } else if (view === 'right') {
+                state.targetAngle = 7;
+                state.targetPanX = -55;
+                headViewBadge.textContent = 'VISTA: DERECHA (PUERTA & ARMARIO)';
+            } else {
+                state.targetAngle = 0;
+                state.targetPanX = 0;
+                headViewBadge.textContent = 'VISTA: FRENTE (TV & LAPTOP)';
+            }
+        }
+
+        /* PARANOIA / "BEING WATCHED" ENGINE TICK */
+        function updateParanoiaLogic() {
+            // Spawn random threat periodically
+            state.threatTimer += 0.016;
+            const spawnInterval = 12 / state.paranoiaFrequency;
+
+            if (state.threatZone === 'none' && state.threatTimer > spawnInterval) {
+                if (Math.random() < 0.4) {
+                    state.threatZone = Math.random() < 0.5 ? 'left' : 'right';
+                    state.threatIntensity = 0.05;
+                    state.threatTimer = 0;
+                    
+                    paranoiaIndicator.className = "w-2.5 h-2.5 rounded-full bg-red-600 animate-ping";
+                    threatWarningBadge.classList.remove('hidden');
+                }
+            }
+
+            // If a threat is active
+            if (state.threatZone !== 'none') {
+                state.threatIntensity += 0.003 * (state.paranoiaFrequency * 0.5);
+                
+                // Play heartbeat faster as intensity grows
+                if (Math.random() < state.threatIntensity * 0.15) {
+                    playHeartbeatSound();
+                }
+
+                // Check if player is facing the threat with the flashlight beam
+                const isFacingThreat = (state.threatZone === state.headView);
+                
+                if (isFacingThreat) {
+                    // Flashlight melts the threat away!
+                    state.threatIntensity -= 0.025;
+                    
+                    if (state.threatIntensity <= 0) {
+                        state.threatZone = 'none';
+                        state.threatIntensity = 0;
+                        state.threatTimer = 0;
+                        
+                        playThreatDispelSound();
+                        paranoiaIndicator.className = "w-2.5 h-2.5 rounded-full bg-emerald-500";
+                        threatWarningBadge.classList.add('hidden');
+                    }
+                }
+
+                // Update red ambient paranoia overlay
+                paranoiaOverlay.style.opacity = Math.min(state.threatIntensity * 0.8, 0.7);
+            } else {
+                paranoiaOverlay.style.opacity = 0;
+            }
+        }
+
+        /* LISTENERS */
+        touchLeft.addEventListener('click', () => updateHeadView('left'));
+        touchRight.addEventListener('click', () => updateHeadView('right'));
+        touchCenter.addEventListener('click', () => {
+            if (state.headView !== 'center') {
+                updateHeadView('center');
+            } else {
+                playFlashlightClickSound();
+                cameraMonitor.classList.remove('translate-y-full', 'opacity-0', 'pointer-events-none');
+            }
+        });
+
+        closeCamBtn.addEventListener('click', () => {
+            playFlashlightClickSound();
+            cameraMonitor.classList.add('translate-y-full', 'opacity-0', 'pointer-events-none');
+        });
+
+        document.querySelectorAll('.cam-select-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                playFlashlightClickSound();
+                activeCamName.textContent = e.target.getAttribute('data-cam');
+            });
+        });
+
+        /* FLASHLIGHT TOUCH / MOUSE POSITION TRACKING */
+        function updateFlashlightPos(clientX, clientY) {
+            if (!audioCtx) initAudioEngine();
+            const rect = gameContainer.getBoundingClientRect();
+            state.flashlightPos.x = clientX - rect.left;
+            state.flashlightPos.y = clientY - rect.top;
+        }
+
+        window.addEventListener('mousemove', (e) => updateFlashlightPos(e.clientX, e.clientY));
+        window.addEventListener('touchmove', (e) => {
+            if (e.touches.length > 0) updateFlashlightPos(e.touches[0].clientX, e.touches[0].clientY);
+        }, { passive: true });
+
+        /* CANVA EDITOR DRAWER CONTROLS */
+        openEditorBtn.addEventListener('click', () => canvaEditorDrawer.classList.remove('translate-x-full'));
+        closeEditorBtn.addEventListener('click', () => canvaEditorDrawer.classList.add('translate-x-full'));
+
+        function handlePhotoUpload(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    const dataUrl = event.target.result;
+                    const img = new Image();
+                    img.onload = function() {
+                        state.userImage = img;
+                        drawRoom();
+
+                        /* SAVE PHOTO TO IPHONE LOCAL MEMORY (FIXED FOREVER) */
+                        try {
+                            localStorage.setItem('fnaf_fixed_room_bg', dataUrl);
+                            if (savedPhotoBadge) savedPhotoBadge.classList.remove('hidden');
+                            if (clearSavedPhotoBtn) clearSavedPhotoBtn.classList.remove('hidden');
+                        } catch (err) {
+                            console.warn('Memory full or restricted', err);
+                        }
+                    };
+                    img.src = dataUrl;
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        if (clearSavedPhotoBtn) {
+            clearSavedPhotoBtn.addEventListener('click', () => {
+                localStorage.removeItem('fnaf_fixed_room_bg');
+                state.userImage = null;
+                if (savedPhotoBadge) savedPhotoBadge.classList.add('hidden');
+                if (clearSavedPhotoBtn) clearSavedPhotoBtn.classList.add('hidden');
+                drawRoom();
+            });
+        }
+
+        directPhotoUpload.addEventListener('change', handlePhotoUpload);
+        canvaPhotoUpload.addEventListener('change', handlePhotoUpload);
+
+        beamRange.addEventListener('input', (e) => {
+            state.flashlightRadius = parseInt(e.target.value);
+            beamVal.textContent = state.flashlightRadius + 'px';
+        });
+
+        darkRange.addEventListener('input', (e) => {
+            state.ambientDarkness = parseInt(e.target.value) / 100;
+            darkVal.textContent = e.target.value + '%';
+        });
+
+        paranoiaRange.addEventListener('input', (e) => {
+            state.paranoiaFrequency = parseInt(e.target.value);
+            const labels = ['Baja', 'Normal', 'Media', 'Alta', 'Extrema'];
+            paranoiaVal.textContent = labels[state.paranoiaFrequency - 1];
+        });
+
+        zoomRange.addEventListener('input', (e) => {
+            state.zoom = parseFloat(e.target.value);
+            zoomVal.textContent = state.zoom.toFixed(2) + 'x';
+        });
+
+        function loop() {
+            // Breathing motion simulation
+            state.breathPhase += 0.025;
+            const breathOffsetY = Math.sin(state.breathPhase) * 1.5;
+
+            // Interpolate head turning smooth movement
+            state.headAngle += (state.targetAngle - state.headAngle) * 0.1;
+            state.panX += (state.targetPanX - state.panX) * 0.1;
+
+            panoramaRoom.style.transform = `scale(${state.zoom}) translate(${state.panX}px, ${breathOffsetY}px) rotate(${state.headAngle}deg)`;
+
+            updateParanoiaLogic();
+            drawRoom();
+            renderFlashlight();
+
+            requestAnimationFrame(loop);
+        }
+
+        // Initialize Engine
+        window.onload = () => {
+            const rect = gameContainer.getBoundingClientRect();
+            state.flashlightPos.x = rect.width / 2;
+            state.flashlightPos.y = rect.height / 2;
+
+            /* 1. CHECK IF USER HAS A FIXED PHOTO SAVED IN IPHONE MEMORY */
+            const savedBg = localStorage.getItem('fnaf_fixed_room_bg');
+            if (savedBg) {
+                const fixedPhoto = new Image();
+                fixedPhoto.onload = () => {
+                    state.userImage = fixedPhoto;
+                    if (savedPhotoBadge) savedPhotoBadge.classList.remove('hidden');
+                    if (clearSavedPhotoBtn) clearSavedPhotoBtn.classList.remove('hidden');
+                    drawRoom();
+                };
+                fixedPhoto.src = savedBg;
+            } else {
+                /* 2. FALLBACK TO LOCAL FILE OR PROCEDURAL SCENE */
+                const defaultPhoto = new Image();
+                defaultPhoto.onload = () => {
+                    state.userImage = defaultPhoto;
+                    drawRoom();
+                };
+                defaultPhoto.onerror = () => {
+                    drawRoom();
+                };
+                defaultPhoto.src = 'image.png';
+            }
+
+            loop();
+        };
+
+        window.addEventListener('resize', () => {
+            drawRoom();
+            renderFlashlight();
+        });
+    </script>
+</body>
+</html>
